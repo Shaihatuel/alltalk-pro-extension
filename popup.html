@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      min-width: 280px;
+      width: 100%;
+      min-height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: #25293b;
+      color: #e5e7eb;
+      overflow-x: hidden;
+      overflow-y: auto;
+    }
+
+    /* Header */
+    .header {
+      padding: 8px 12px;
+      border-bottom: 1px solid #3d4357;
+      background: #25293b;
+      width: 100%;
+    }
+
+    /* Top row: Logo on left, controls on right */
+    .header-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 6px;
+      flex-wrap: wrap;
+    }
+
+    .header img {
+      max-width: 90px;
+      height: auto;
+      flex-shrink: 0;
+    }
+
+    /* Controls container on the right */
+    .header-controls {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 3px;
+    }
+
+    /* Pop Out Button */
+    .pop-out-btn {
+      width: auto;
+      padding: 3px 8px;
+      margin: 0;
+      font-size: 10px;
+      background: #3d4357;
+      color: #9ca3af;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+
+    .pop-out-btn:hover {
+      background: #4d5367;
+      color: #e5e7eb;
+      transform: none;
+      box-shadow: none;
+    }
+
+    /* Status bar with refresh button */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 10px;
+      background: #1a1d2e;
+      border: 1px solid #3d4357;
+      border-radius: 6px;
+      font-size: 11px;
+      color: #9ca3af;
+      gap: 8px;
+    }
+
+    #status {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .refresh-btn {
+      width: 24px;
+      height: 24px;
+      min-width: 24px;
+      padding: 0;
+      margin: 0;
+      background: transparent;
+      border: none;
+      border-radius: 4px;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: #9ca3af;
+      transition: all 0.15s ease;
+      flex-shrink: 0;
+    }
+
+    .refresh-btn:hover {
+      background: #3d4357;
+      color: #e5e7eb;
+      transform: none;
+      box-shadow: none;
+    }
+
+    /* Content area */
+    .content {
+      padding: 12px;
+      width: 100%;
+    }
+
+    /* Buttons */
+    button {
+      width: 100%;
+      padding: 12px;
+      margin: 6px 0;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      border-radius: 8px;
+      transition: all 0.15s ease;
+      text-align: center;
+      color: white;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* Purple buttons */
+    .btn-purple {
+      background: #7066e7;
+    }
+
+    .btn-purple:hover {
+      background: #5d54d4;
+    }
+
+    /* Green buttons */
+    .btn-green {
+      background: #10b981;
+    }
+
+    .btn-green:hover {
+      background: #059669;
+    }
+
+    /* Blue buttons */
+    .btn-blue {
+      background: #3b82f6;
+    }
+
+    .btn-blue:hover:not(:disabled) {
+      background: #2563eb;
+    }
+
+    .btn-blue:disabled {
+      background: #4b5563;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .divider {
+      height: 1px;
+      background: #3d4357;
+      margin: 16px 0;
+    }
+
+    .section-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: #9ca3af;
+      text-transform: uppercase;
+      margin: 16px 0 8px 0;
+      letter-spacing: 0.5px;
+    }
+
+    /* Contact scraper */
+    .contact-preview {
+      padding: 10px;
+      background: #1a1d2e;
+      border: 1px solid #3d4357;
+      border-radius: 8px;
+      font-size: 13px;
+      color: #9ca3af;
+      display: none;
+      margin-bottom: 12px;
+      overflow: hidden;
+    }
+
+    .contact-preview.active {
+      display: block;
+    }
+
+    .contact-preview .field {
+      display: flex;
+      align-items: center;
+      margin: 4px 0;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+
+    .contact-preview .label {
+      color: #6b7280;
+      width: 50px;
+      flex-shrink: 0;
+    }
+
+    .contact-preview .value {
+      color: #e5e7eb;
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      word-break: break-word;
+    }
+
+    .copy-btn {
+      width: 24px;
+      height: 24px;
+      min-width: 24px;
+      padding: 0;
+      margin: 0;
+      background: transparent;
+      border: 1px solid #3d4357;
+      border-radius: 4px;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: #9ca3af;
+      transition: all 0.15s ease;
+      flex-shrink: 0;
+    }
+
+    .copy-btn:hover {
+      background: #3d4357;
+      color: #e5e7eb;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .copy-btn.copied {
+      background: #10b981;
+      border-color: #10b981;
+      color: white;
+    }
+
+    /* Phone Numbers Section */
+    .phone-numbers-section {
+      margin: 12px 0;
+    }
+
+    .phone-numbers-label {
+      font-size: 11px;
+      color: #9ca3af;
+      margin-bottom: 6px;
+    }
+
+    .phone-buttons-container {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .phone-btn {
+      width: 100%;
+      padding: 8px 10px;
+      margin: 0;
+      font-size: 13px;
+      font-weight: 500;
+      background: #7066e7;
+      border: none;
+      border-radius: 6px;
+      color: white;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .phone-btn:hover {
+      background: #5d54d4;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+
+    .phone-btn.selected {
+      box-shadow: 0 0 0 2px #a5b4fc;
+    }
+
+    .phone-btn .phone-info {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .phone-btn .phone-number {
+      font-family: monospace;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .phone-btn .phone-label {
+      font-size: 9px;
+      opacity: 0.8;
+      text-transform: uppercase;
+      flex-shrink: 0;
+    }
+
+    .phone-btn .phone-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .phone-btn .phone-status {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(255,255,255,0.2);
+      white-space: nowrap;
+    }
+
+    .phone-btn .phone-copy-btn {
+      width: 24px;
+      height: 24px;
+      min-width: 24px;
+      padding: 0;
+      margin: 0;
+      background: rgba(255,255,255,0.2);
+      border: none;
+      border-radius: 4px;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: white;
+      transition: all 0.15s ease;
+    }
+
+    .phone-btn .phone-copy-btn:hover {
+      background: rgba(255,255,255,0.3);
+      transform: none;
+      box-shadow: none;
+    }
+
+    .phone-btn .phone-copy-btn.copied {
+      background: #10b981;
+    }
+
+    /* Settings section */
+    .settings-section {
+      background: #1a1d2e;
+      border: 1px solid #3d4357;
+      border-radius: 8px;
+      padding: 12px;
+      margin: 8px 0;
+    }
+
+    .settings-section input {
+      width: 100%;
+      padding: 10px;
+      margin: 8px 0;
+      font-size: 12px;
+      border: 1px solid #3d4357;
+      border-radius: 6px;
+      background: #25293b;
+      color: #e5e7eb;
+    }
+
+    .settings-section input:focus {
+      outline: none;
+      border-color: #7066e7;
+    }
+
+    .settings-section input::placeholder {
+      color: #6b7280;
+    }
+
+    .token-status {
+      font-size: 11px;
+      color: #9ca3af;
+      margin-top: 4px;
+    }
+
+    .token-status.saved {
+      color: #10b981;
+    }
+
+    /* Dropdown */
+    select {
+      width: 100%;
+      padding: 10px;
+      margin: 8px 0;
+      font-size: 13px;
+      border: 1px solid #3d4357;
+      border-radius: 6px;
+      background: #1a1d2e;
+      color: #e5e7eb;
+      cursor: pointer;
+    }
+
+    select:focus {
+      outline: none;
+      border-color: #7066e7;
+    }
+
+    select:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .workflow-section {
+      margin: 12px 0;
+    }
+
+    .workflow-label {
+      font-size: 12px;
+      color: #9ca3af;
+      margin-bottom: 4px;
+    }
+
+    /* Spinner */
+    .spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    button.loading {
+      opacity: 0.7;
+      pointer-events: none;
+    }
+
+    /* Responsive adjustments for smaller windows */
+    @media (max-width: 400px) {
+      .header img {
+        max-width: 70px;
+      }
+      
+      .phone-btn {
+        padding: 8px;
+      }
+      
+      .phone-btn .phone-number {
+        font-size: 12px;
+      }
+      
+      .phone-btn .phone-label {
+        font-size: 8px;
+      }
+      
+      .contact-preview .field {
+        font-size: 12px;
+      }
+      
+      .contact-preview .label {
+        width: 45px;
+      }
+      
+      button {
+        padding: 10px;
+        font-size: 13px;
+      }
+      
+      select {
+        font-size: 12px;
+        padding: 8px;
+      }
+    }
+
+    @media (max-width: 320px) {
+      .content {
+        padding: 8px;
+      }
+      
+      .header {
+        padding: 6px 8px;
+      }
+      
+      .header img {
+        max-width: 60px;
+      }
+      
+      .phone-btn .phone-actions {
+        gap: 4px;
+      }
+      
+      .phone-btn .phone-status {
+        font-size: 9px;
+        padding: 2px 4px;
+      }
+      
+      .phone-btn .phone-number {
+        font-size: 11px;
+      }
+      
+      .phone-btn .phone-copy-btn {
+        width: 20px;
+        height: 20px;
+        min-width: 20px;
+      }
+      
+      .contact-preview .label {
+        width: 40px;
+        font-size: 11px;
+      }
+      
+      .contact-preview .value {
+        font-size: 11px;
+      }
+      
+      button {
+        padding: 8px;
+        font-size: 12px;
+      }
+      
+      .workflow-label, .phone-numbers-label {
+        font-size: 10px;
+      }
+    }
+    
+    /* Larger windows - expand nicely */
+    @media (min-width: 500px) {
+      .phone-btn {
+        padding: 10px 14px;
+      }
+      
+      .phone-btn .phone-number {
+        font-size: 14px;
+      }
+      
+      .contact-preview {
+        padding: 12px;
+      }
+      
+      .contact-preview .field {
+        font-size: 14px;
+      }
+      
+      button {
+        padding: 14px;
+        font-size: 15px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header with Logo and Controls -->
+  <div class="header">
+    <div class="header-top">
+      <img src="logo.png" alt="AllTalk Pro">
+      <div class="header-controls">
+        <button id="popOutBtn" class="pop-out-btn">⧉ Pop Out</button>
+      </div>
+    </div>
+    <div class="status-bar">
+      <span id="status">Status: ready</span>
+      <button id="refreshContact" class="refresh-btn" title="Refresh Contact">🔄</button>
+    </div>
+  </div>
+
+  <!-- Content -->
+  <div class="content">
+    
+    <div id="contactPreview" class="contact-preview"></div>
+
+    <!-- Phone Numbers Section -->
+    <div class="phone-numbers-section">
+      <div class="phone-numbers-label">Phone Numbers:</div>
+      <div class="phone-buttons-container" id="phoneButtonsContainer">
+        <!-- Phone buttons will be dynamically added here -->
+      </div>
+    </div>
+
+    <div class="workflow-section">
+      <div class="workflow-label">Assign to Workflow:</div>
+      <select id="workflowSelect" disabled>
+        <option value="">Sign in to load workflows...</option>
+      </select>
+    </div>
+    
+    <button id="addToAllTalk" class="btn-blue" disabled>➕ Add to AllTalk Pro</button>
+
+    <div class="divider"></div>
+
+    <button id="toggleSettings" class="btn-purple">⚙️ Settings</button>
+
+    <div class="settings-section" id="settingsSection" style="display: none;">
+      <div class="section-title">AllTalk Pro Login</div>
+      <input type="email" id="loginEmail" placeholder="Email address...">
+      <input type="password" id="loginPassword" placeholder="Password...">
+      <button id="loginBtn" class="btn-green">🔐 Sign In</button>
+      <div class="token-status" id="tokenStatus">Not signed in</div>
+    </div>
+
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

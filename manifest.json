@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "AllTalk Pro",
+  "version": "3.3",
+  "description": "Transfer contacts from VanillaSoft to AllTalk Pro with one click.",
+  "permissions": ["activeTab", "scripting", "storage", "tabs"],
+  "host_permissions": [
+    "https://*.vanillasoft.net/*",
+    "https://vanillasoft.net/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://*.vanillasoft.net/*", "https://vanillasoft.net/*"],
+      "js": ["content.js", "vanillasoft.js"],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  }
+}
