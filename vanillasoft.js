@@ -349,26 +349,34 @@ function findAllPhoneNumbers(doc) {
   }
 
   // METHOD B: Scan page for phone patterns near known labels using regex
+  // Note: VanillaSoft sometimes formats as "348- 4484" (dash + space), so use [-.\s]{0,2}
+  const phoneRegex = '[1]?\\s*\\(?\\d{3}\\)?[-.\\ ]{0,2}\\d{3}[-.\\ ]{0,2}\\d{4}';
   const labelPatterns = [
-    { regex: /Primary\s*Phone[\s\n]*([1]?\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})/i, label: 'Primary' },
-    { regex: /Home\s*Phone[\s\n]*([1]?\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})/i, label: 'Alt' },
-    { regex: /Home[\s\n]+([1]?\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})/i, label: 'Alt' },
-    { regex: /Mobile\s*Phone[\s\n]*([1]?\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})/i, label: 'Alt' },
-    { regex: /Cell\s*Phone[\s\n]*([1]?\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})/i, label: 'Alt' },
-    { regex: /Work\s*Phone[\s\n]*([1]?\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})/i, label: 'Alt' },
-    { regex: /Best\s*Phone[\s\n]*([1]?\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})/i, label: 'Alt' },
-    { regex: /Another\s*Phone[\s\n]*([1]?\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})/i, label: 'Alt' },
-    { regex: /Other\s*Phone[\s\n]*([1]?\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})/i, label: 'Alt' },
-    { regex: /Alt\s*Phone[\s\n]*([1]?\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})/i, label: 'Alt' },
+    { regex: new RegExp('Primary\\s*Phone[\\s\\n]*(' + phoneRegex + ')', 'i'), label: 'Primary' },
+    { regex: new RegExp('Home\\s*Phone[\\s\\n]*(' + phoneRegex + ')', 'i'), label: 'Alt' },
+    { regex: new RegExp('Home[\\s\\n]+(' + phoneRegex + ')', 'i'), label: 'Alt' },
+    { regex: new RegExp('Mobile\\s*Phone[\\s\\n]*(' + phoneRegex + ')', 'i'), label: 'Alt' },
+    { regex: new RegExp('Cell\\s*Phone[\\s\\n]*(' + phoneRegex + ')', 'i'), label: 'Alt' },
+    { regex: new RegExp('Work\\s*Phone[\\s\\n]*(' + phoneRegex + ')', 'i'), label: 'Alt' },
+    { regex: new RegExp('Best\\s*Phone[\\s\\n]*(' + phoneRegex + ')', 'i'), label: 'Alt' },
+    { regex: new RegExp('Another\\s*Phone[\\s\\n]*(' + phoneRegex + ')', 'i'), label: 'Alt' },
+    { regex: new RegExp('Other\\s*Phone[\\s\\n]*(' + phoneRegex + ')', 'i'), label: 'Alt' },
+    { regex: new RegExp('Alt\\s*Phone[\\s\\n]*(' + phoneRegex + ')', 'i'), label: 'Alt' },
     { regex: /phone:\s*(\d{10,11})\s*confidence:/gi, label: 'Alt' },
   ];
+  
+  // Relaxed phone extractor for matched text (handles "348- 4484" format)
+  const extractPhoneFromMatch = (text) => {
+    const m = text.match(/\d{10,11}|\(?\d{3}\)?[-.\s]{0,2}\d{3}[-.\s]{0,2}\d{4}/);
+    return m ? m[0] : null;
+  };
   
   for (const { regex, label } of labelPatterns) {
     const matches = allText.match(regex);
     if (matches) {
-      const phoneMatch = matches[0].match(/\d{10,11}|\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/);
+      const phoneMatch = extractPhoneFromMatch(matches[0]);
       if (phoneMatch) {
-        addPhone(phoneMatch[0], phoneNumbers.length === 0 ? 'Primary' : label, 'regex pattern');
+        addPhone(phoneMatch, phoneNumbers.length === 0 ? 'Primary' : label, 'regex pattern');
       }
     }
   }
@@ -378,14 +386,17 @@ function findAllPhoneNumbers(doc) {
   doc.querySelectorAll('td, div, span, label, th').forEach(el => {
     const text = (el.textContent || '').toLowerCase().trim();
     
+    // Skip elements that are part of "Other Phone Numbers From People Search" or similar non-contact fields
+    if (text.includes('people search') || text.includes('script tab') || text.includes('other phone numbers from')) return;
+    
     for (const keyword of phoneKeywords) {
       if (text === keyword || text.startsWith(keyword + '\n') || text.startsWith(keyword + ' ')) {
         const parent = el.parentElement;
         if (parent) {
           const parentText = parent.textContent || '';
-          const phoneMatch = parentText.match(/[1]?\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/);
+          if (parentText.toLowerCase().includes('people search') || parentText.toLowerCase().includes('script tab')) continue;
+          const phoneMatch = parentText.match(/[1]?\s*\(?\d{3}\)?[-.\s]{0,2}\d{3}[-.\s]{0,2}\d{4}/);
           if (phoneMatch && isPhoneNumber(phoneMatch[0])) {
-            // Only Primary if explicitly labeled, otherwise Alt
             let lbl = keyword.includes('primary') ? 'Primary' : 'Alt';
             addPhone(phoneMatch[0], phoneNumbers.length === 0 ? 'Primary' : lbl, 'keyword search');
           }
@@ -394,7 +405,7 @@ function findAllPhoneNumbers(doc) {
         const sib = el.nextElementSibling;
         if (sib) {
           const sibText = sib.textContent || '';
-          const sibPhone = sibText.match(/[1]?\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/);
+          const sibPhone = sibText.match(/[1]?\s*\(?\d{3}\)?[-.\s]{0,2}\d{3}[-.\s]{0,2}\d{4}/);
           if (sibPhone && isPhoneNumber(sibPhone[0])) {
             addPhone(sibPhone[0], phoneNumbers.length === 0 ? 'Primary' : 'Alt', 'sibling search');
           }
@@ -408,12 +419,16 @@ function findAllPhoneNumbers(doc) {
   doc.querySelectorAll('div, span, td').forEach(el => {
     if (el.children.length === 0) {
       const text = (el.textContent || '').trim();
-      if (text.match(/^[1]?\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}$/)) {
+      if (text.match(/^[1]?\s*\(?\d{3}\)?[-.\s]{0,2}\d{3}[-.\s]{0,2}\d{4}$/)) {
         const parentText = (el.parentElement?.textContent || '').toLowerCase();
+        
+        // Skip People Search, Script Tab, and other non-contact fields
+        if (parentText.includes('people search') || parentText.includes('script tab') || 
+            parentText.includes('other phone numbers from')) return;
         
         // MUST have a phone-related label
         const hasPhoneLabel = parentText.includes('phone') || 
-                             parentText.includes('home') && !parentText.includes('homepage') ||
+                             (parentText.includes('home') && !parentText.includes('homepage')) ||
                              parentText.includes('mobile') || parentText.includes('cell') ||
                              parentText.includes('work') || parentText.includes('best') ||
                              parentText.includes('primary') || parentText.includes('another');
@@ -442,9 +457,10 @@ function findAllPhoneNumbers(doc) {
                          parentText.includes('mobile') || parentText.includes('cell') ||
                          parentText.includes('primary');
     
-    // Skip if in SMS area
+    // Skip if in SMS area or People Search
     const inSmsArea = parentText.includes('delivered') || parentText.includes('send from') ||
-                     parentText.includes('michael') || parentText.includes('devin');
+                     parentText.includes('michael') || parentText.includes('devin') ||
+                     parentText.includes('people search') || parentText.includes('script tab');
     
     if (hasPhoneLabel && !inSmsArea) {
       addPhone(phone, phoneNumbers.length === 0 ? 'Primary' : 'Alt', 'tel link');
@@ -456,7 +472,7 @@ function findAllPhoneNumbers(doc) {
   if (phoneNumbers.length === 0) {
     console.log('No phones found from methods A-E, trying broad scan...');
     
-    const allPhones = allText.match(/[1]?\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g) || [];
+    const allPhones = allText.match(/[1]?\s*\(?\d{3}\)?[-.\s]{0,2}\d{3}[-.\s]{0,2}\d{4}/g) || [];
     
     for (const phone of allPhones) {
       const cleaned = cleanPhoneNumber(phone);
@@ -472,6 +488,13 @@ function findAllPhoneNumbers(doc) {
         
         if (!hasPhoneLabel) {
           console.log('Skipping - no phone label:', cleaned);
+          continue;
+        }
+        
+        // Skip People Search / Script Tab fields
+        if (contextBefore.includes('people search') || contextBefore.includes('script tab') ||
+            contextBefore.includes('other phone numbers from')) {
+          console.log('Skipping - People Search field:', cleaned);
           continue;
         }
         

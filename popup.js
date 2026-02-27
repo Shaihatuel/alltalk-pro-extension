@@ -164,8 +164,10 @@ async function apiRequest(endpoint, options = {}) {
 // CORE FUNCTIONS
 // ============================================
 
+let lastStatusMsg = '';
 function setStatus(msg) {
-  if (statusEl) {
+  if (statusEl && msg !== lastStatusMsg) {
+    lastStatusMsg = msg;
     statusEl.textContent = `Status: ${msg}`;
   }
 }
@@ -602,7 +604,6 @@ async function checkContactInAllTalk(phoneNumber, buttonIndex = 0) {
     return;
   }
   
-  setStatus("Checking AllTalk...");
   const cleanPhone = cleanPhoneNumber(phoneNumber);
   
   const result = await apiRequest(`/api/v1/contacts?search=${cleanPhone}`, { method: "GET" });
@@ -1094,26 +1095,34 @@ function scrapeContactFromPage() {
     }
 
     // METHOD B: Scan page for phone patterns near known labels using regex
+    // Note: VanillaSoft sometimes formats as "348- 4484" (dash + space), so use [-.\s]{0,2}
+    const phoneRegex = '[1]?\\s*\\(?\\d{3}\\)?[-.\\ ]{0,2}\\d{3}[-.\\ ]{0,2}\\d{4}';
     const labelPatterns = [
-      { regex: /Primary\s*Phone[\s\n]*([1]?\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})/i, label: 'Primary' },
-      { regex: /Home\s*Phone[\s\n]*([1]?\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})/i, label: 'Alt' },
-      { regex: /Home[\s\n]+([1]?\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})/i, label: 'Alt' },
-      { regex: /Mobile\s*Phone[\s\n]*([1]?\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})/i, label: 'Alt' },
-      { regex: /Cell\s*Phone[\s\n]*([1]?\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})/i, label: 'Alt' },
-      { regex: /Work\s*Phone[\s\n]*([1]?\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})/i, label: 'Alt' },
-      { regex: /Best\s*Phone[\s\n]*([1]?\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})/i, label: 'Alt' },
-      { regex: /Another\s*Phone[\s\n]*([1]?\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})/i, label: 'Alt' },
-      { regex: /Other\s*Phone[\s\n]*([1]?\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})/i, label: 'Alt' },
-      { regex: /Alt\s*Phone[\s\n]*([1]?\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4})/i, label: 'Alt' },
+      { regex: new RegExp('Primary\\s*Phone[\\s\\n]*(' + phoneRegex + ')', 'i'), label: 'Primary' },
+      { regex: new RegExp('Home\\s*Phone[\\s\\n]*(' + phoneRegex + ')', 'i'), label: 'Alt' },
+      { regex: new RegExp('Home[\\s\\n]+(' + phoneRegex + ')', 'i'), label: 'Alt' },
+      { regex: new RegExp('Mobile\\s*Phone[\\s\\n]*(' + phoneRegex + ')', 'i'), label: 'Alt' },
+      { regex: new RegExp('Cell\\s*Phone[\\s\\n]*(' + phoneRegex + ')', 'i'), label: 'Alt' },
+      { regex: new RegExp('Work\\s*Phone[\\s\\n]*(' + phoneRegex + ')', 'i'), label: 'Alt' },
+      { regex: new RegExp('Best\\s*Phone[\\s\\n]*(' + phoneRegex + ')', 'i'), label: 'Alt' },
+      { regex: new RegExp('Another\\s*Phone[\\s\\n]*(' + phoneRegex + ')', 'i'), label: 'Alt' },
+      { regex: new RegExp('Other\\s*Phone[\\s\\n]*(' + phoneRegex + ')', 'i'), label: 'Alt' },
+      { regex: new RegExp('Alt\\s*Phone[\\s\\n]*(' + phoneRegex + ')', 'i'), label: 'Alt' },
       { regex: /phone:\s*(\d{10,11})\s*confidence:/gi, label: 'Alt' },
     ];
+    
+    // Relaxed phone extractor for matched text (handles "348- 4484" format)
+    const extractPhoneFromMatch = (text) => {
+      const m = text.match(/\d{10,11}|\(?\d{3}\)?[-.\s]{0,2}\d{3}[-.\s]{0,2}\d{4}/);
+      return m ? m[0] : null;
+    };
     
     for (const { regex, label } of labelPatterns) {
       const matches = allText.match(regex);
       if (matches) {
-        const phoneMatch = matches[0].match(/\d{10,11}|\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/);
+        const phoneMatch = extractPhoneFromMatch(matches[0]);
         if (phoneMatch) {
-          addPhone(phoneMatch[0], phoneNumbers.length === 0 ? 'Primary' : label, 'regex pattern');
+          addPhone(phoneMatch, phoneNumbers.length === 0 ? 'Primary' : label, 'regex pattern');
         }
       }
     }
@@ -1123,13 +1132,18 @@ function scrapeContactFromPage() {
     doc.querySelectorAll('td, div, span, label, th').forEach(el => {
       const text = (el.textContent || '').toLowerCase().trim();
       
+      // Skip elements that are part of "Other Phone Numbers From People Search" or similar non-contact fields
+      if (text.includes('people search') || text.includes('script tab') || text.includes('other phone numbers from')) return;
+      
       for (const keyword of phoneKeywords) {
         if (text === keyword || text.startsWith(keyword + '\n') || text.startsWith(keyword + ' ')) {
           // Check parent for phone
           const parent = el.parentElement;
           if (parent) {
             const parentText = parent.textContent || '';
-            const phoneMatch = parentText.match(/[1]?\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/);
+            // Skip if parent is a "People Search" or broad field
+            if (parentText.toLowerCase().includes('people search') || parentText.toLowerCase().includes('script tab')) continue;
+            const phoneMatch = parentText.match(/[1]?\s*\(?\d{3}\)?[-.\s]{0,2}\d{3}[-.\s]{0,2}\d{4}/);
             if (phoneMatch && isPhoneNumber(phoneMatch[0])) {
               // Only Primary if explicitly labeled, otherwise Alt
               let lbl = keyword.includes('primary') ? 'Primary' : 'Alt';
@@ -1141,7 +1155,7 @@ function scrapeContactFromPage() {
           const sib = el.nextElementSibling;
           if (sib) {
             const sibText = sib.textContent || '';
-            const sibPhone = sibText.match(/[1]?\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/);
+            const sibPhone = sibText.match(/[1]?\s*\(?\d{3}\)?[-.\s]{0,2}\d{3}[-.\s]{0,2}\d{4}/);
             if (sibPhone && isPhoneNumber(sibPhone[0])) {
               addPhone(sibPhone[0], phoneNumbers.length === 0 ? 'Primary' : 'Alt', 'sibling search');
             }
@@ -1155,12 +1169,16 @@ function scrapeContactFromPage() {
     doc.querySelectorAll('div, span, td').forEach(el => {
       if (el.children.length === 0) {
         const text = (el.textContent || '').trim();
-        if (text.match(/^[1]?\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}$/)) {
+        if (text.match(/^[1]?\s*\(?\d{3}\)?[-.\s]{0,2}\d{3}[-.\s]{0,2}\d{4}$/)) {
           const parentText = (el.parentElement?.textContent || '').toLowerCase();
+          
+          // Skip People Search, Script Tab, and other non-contact fields
+          if (parentText.includes('people search') || parentText.includes('script tab') || 
+              parentText.includes('other phone numbers from')) return;
           
           // MUST have a phone-related label
           const hasPhoneLabel = parentText.includes('phone') || 
-                               parentText.includes('home') && !parentText.includes('homepage') ||
+                               (parentText.includes('home') && !parentText.includes('homepage')) ||
                                parentText.includes('mobile') || parentText.includes('cell') ||
                                parentText.includes('work') || parentText.includes('best') ||
                                parentText.includes('primary') || parentText.includes('another');
@@ -1203,7 +1221,7 @@ function scrapeContactFromPage() {
     if (phoneNumbers.length === 0) {
       console.log('No phones found from methods A-E, trying broad scan...');
       
-      const allPhones = allText.match(/[1]?\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g) || [];
+      const allPhones = allText.match(/[1]?\s*\(?\d{3}\)?[-.\s]{0,2}\d{3}[-.\s]{0,2}\d{4}/g) || [];
       
       for (const phone of allPhones) {
         const cleaned = cleanPhoneNumber(phone);
@@ -1219,6 +1237,13 @@ function scrapeContactFromPage() {
           
           if (!hasPhoneLabel) {
             console.log('Skipping - no phone label:', cleaned);
+            continue;
+          }
+          
+          // Skip People Search / Script Tab fields
+          if (contextBefore.includes('people search') || contextBefore.includes('script tab') ||
+              contextBefore.includes('other phone numbers from')) {
+            console.log('Skipping - People Search field:', cleaned);
             continue;
           }
           
@@ -1393,7 +1418,8 @@ function processScrapedContact(response) {
   // Sync the poll baseline to the authoritative scraped name so that
   // non-deterministic findContactName() results don't keep re-triggering scrapes.
   lastContactName = (scrapedContact.firstName || '') + '|' + (scrapedContact.lastName || '');
-  console.log('Scrape complete — lastContactName synced to:', lastContactName);
+  lastScrapedPhone = cleanPhoneNumber(scrapedContact.phone || '');
+  console.log('Scrape complete — lastContactName synced to:', lastContactName, 'phone:', lastScrapedPhone);
   phoneNumbers = response.phoneNumbers || [];
   
   // Clean all phone numbers
@@ -1674,110 +1700,92 @@ if (refreshContactBtn) {
 
 // Poll for contact changes while popup is open
 let lastContactName = "";
+let lastScrapedPhone = ""; // Track phone to avoid redundant re-scrapes
 let pollInterval = null;
 let isPollingActive = true;
 
 async function pollForContactChanges() {
-  console.log('Polling: checking for contact change');
-  if (!isPollingActive) return;
+  if (!isPollingActive || isScraping) return;
   
   const tabId = await getTargetTabId();
-  if (!tabId) {
-    console.log("Poll: no tabId found, will retry next interval");
-    return;
-  }
+  if (!tabId) return;
   
-  chrome.runtime.sendMessage({ type: "RELAY_GET_CONTACT_NAME", tabId }, (relayed) => {
-    if (chrome.runtime.lastError) {
-      console.log('Poll relay error:', chrome.runtime.lastError.message);
-      return;
+  try {
+    // Use executeScript to get the contact name and phone
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: tabId, allFrames: false },
+      func: () => {
+        const firstName = document.querySelector('#FirstName, [name="FirstName"]');
+        const lastName = document.querySelector('#LastName, [name="LastName"]');
+        const phone = document.querySelector('#Phone, #PrimaryPhone, #n2807139, [name="Phone"]');
+        const fn = firstName ? (firstName.value || firstName.textContent || '').trim() : '';
+        const ln = lastName ? (lastName.value || lastName.textContent || '').trim() : '';
+        const ph = phone ? (phone.value || phone.textContent || '').trim().replace(/\D/g, '') : '';
+        if (fn || ln || ph) return { ok: true, name: fn + '|' + ln, phone: ph };
+        return null;
+      }
+    });
+
+    let pollData = null;
+    for (const r of results) {
+      if (r.result && r.result.ok) { pollData = r.result; break; }
     }
-    const response = relayed && relayed.response;
-    const errMsg = (relayed && relayed.relayError) || '';
-    console.log('Poll raw response:', JSON.stringify(response));
 
-    if (errMsg) {
-      console.log("Poll error:", errMsg);
+    // If main frame didn't have it, try allFrames
+    if (!pollData) {
+      try {
+        const allResults = await chrome.scripting.executeScript({
+          target: { tabId: tabId, allFrames: true },
+          func: () => {
+            const firstName = document.querySelector('#FirstName, [name="FirstName"]');
+            const lastName = document.querySelector('#LastName, [name="LastName"]');
+            const phone = document.querySelector('#Phone, #PrimaryPhone, #n2807139, [name="Phone"]');
+            const fn = firstName ? (firstName.value || firstName.textContent || '').trim() : '';
+            const ln = lastName ? (lastName.value || lastName.textContent || '').trim() : '';
+            const ph = phone ? (phone.value || phone.textContent || '').trim().replace(/\D/g, '') : '';
+            if (fn || ln || ph) return { ok: true, name: fn + '|' + ln, phone: ph };
+            return null;
+          }
+        });
 
-      // If the content script is not present (e.g. page navigated/was reloaded),
-      // attempt to inject it and retry once after a short delay.
-      if (errMsg.includes("Receiving end does not exist") || errMsg.includes("Could not establish connection")) {
-        // Check retry count for this tab
-        const currentRetries = injectionRetryCounts[tabId] || 0;
-        if (currentRetries >= MAX_INJECTION_RETRIES) {
-          console.log('Poll: injection retries exceeded for tab', tabId);
-          showInjectionExhaustedNotice();
-        } else if (isScraping) {
-          console.log('Poll: scrape already in progress, skipping injection');
-        } else {
-          console.log('Poll: content script missing, injecting vanillasoft.js into tab', tabId, 'attempt', currentRetries + 1);
-          injectionRetryCounts[tabId] = currentRetries + 1;
-
-          (async () => {
-            try {
-              await chrome.scripting.executeScript({ target: { tabId: tabId, allFrames: true }, files: ["vanillasoft.js"] });
-              console.log('Poll: injection complete, retrying GET_CONTACT_NAME in 500ms');
-            } catch (e) {
-              console.log('Poll: injection failed:', e && e.message ? e.message : e);
-              return;
-            }
-
-            setTimeout(() => {
-              chrome.runtime.sendMessage({ type: "RELAY_GET_CONTACT_NAME", tabId }, (retryRelayed) => {
-                if (chrome.runtime.lastError) {
-                  console.log('Poll retry relay error:', chrome.runtime.lastError.message);
-                  return;
-                }
-
-                const retryResponse = retryRelayed && retryRelayed.response;
-                if (retryResponse && retryResponse.ok && retryResponse.name) {
-                  // Reset retry counter on success
-                  injectionRetryCounts[tabId] = 0;
-                  const currentName = retryResponse.name;
-
-                  if (!lastContactName) {
-                    lastContactName = currentName;
-                    console.log('Initial contact name set (retry):', currentName);
-                    return;
-                  }
-
-                  if (currentName !== lastContactName) {
-                    lastContactName = currentName;
-                    console.log(`Name changed from ${lastContactName} to ${currentName}`);
-                    setStatus("New contact detected...");
-                    setTimeout(() => { autoScrapeContact(); }, 500);
-                  }
-                }
-              });
-            }, 500);
-          })();
+        for (const r of allResults) {
+          if (r.result && r.result.ok) { pollData = r.result; break; }
         }
+      } catch (e) {
+        // Cross-origin iframe errors — ignore
       }
+    }
 
+    if (!pollData) return;
+
+    const pollName = pollData.name;
+    // Clean the polled phone to 10 digits for comparison
+    let pollPhone = pollData.phone || '';
+    if (pollPhone.length === 11 && pollPhone.startsWith('1')) pollPhone = pollPhone.substring(1);
+
+    if (!lastContactName) {
+      lastContactName = pollName;
+      console.log("Poll: initial contact name set:", pollName);
       return;
     }
 
-    console.log('Poll guard check:', response && response.ok, response && response.name);
-    if (response && response.ok && response.name) {
-      // Reset injection retry counter on successful response
-      injectionRetryCounts[tabId] = 0;
-      const currentName = response.name;
-
-      if (!lastContactName) {
-        lastContactName = currentName;
-        console.log("Initial contact name set:", currentName);
-        return;
-      }
-
-      if (currentName !== lastContactName) {
-        console.log('Poll name mismatch — current:', currentName, '| stored:', lastContactName);
-        lastContactName = currentName;
-        console.log(`Name changed from ${lastContactName} to ${currentName}`);
+    // Only trigger re-scrape if name actually changed AND it's a different contact
+    // (phone also changed, or phone wasn't available to compare)
+    if (pollName !== lastContactName) {
+      const phoneAlsoChanged = !lastScrapedPhone || !pollPhone || pollPhone !== lastScrapedPhone;
+      if (phoneAlsoChanged) {
+        console.log('Poll: contact changed — name:', lastContactName, '→', pollName, '| phone:', lastScrapedPhone, '→', pollPhone);
+        lastContactName = pollName;
         setStatus("New contact detected...");
         setTimeout(() => { autoScrapeContact(); }, 500);
+      } else {
+        // Name format differed but phone is the same — just sync the name, don't re-scrape
+        lastContactName = pollName;
       }
     }
-  });
+  } catch (e) {
+    console.log('Poll error:', e.message);
+  }
 }
 
 // Start polling when popup opens

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AllTalk Pro",
-  "version": "3.3",
+  "version": "3.4",
   "description": "Transfer contacts from VanillaSoft to AllTalk Pro with one click.",
   "permissions": ["activeTab", "scripting", "storage", "tabs"],
   "host_permissions": [
